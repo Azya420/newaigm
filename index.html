@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mistrz Gry — RPG Voice</title>
+  <style>
+    :root { font-family: Inter, system-ui, Arial, sans-serif; color-scheme: dark; }
+    body { margin: 0; background: #111827; color: #e5e7eb; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px; }
+    .card { background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    h1,h2 { margin-top: 0; }
+    button,input,select { background:#111827; color:#e5e7eb; border:1px solid #4b5563; border-radius:8px; padding:8px 10px; }
+    button { cursor:pointer; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    #timeline { display:flex; flex-direction:column; gap:12px; }
+    .msg { padding:12px; border:1px solid #4b5563; border-radius:10px; background:#0f172a; }
+    .meta { font-size: 12px; color:#93c5fd; margin-bottom:8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎲 Mistrz Gry</h1>
+    <p>Aplikacja do głosowej kampanii RPG: Mistrz Gry mówi, gracze odpowiadają nagraniami głosowymi.</p>
+
+    <div class="card">
+      <h2>Ustawienia sesji</h2>
+      <div class="row">
+        <label for="gmName">Imię Mistrza Gry:</label>
+        <input id="gmName" value="Mistrz" />
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <input id="playerName" placeholder="Imię gracza" />
+        <button id="addPlayer">Dodaj gracza</button>
+      </div>
+      <div id="players" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>Nagrywanie wiadomości</h2>
+      <div class="row">
+        <label for="speakerRole">Kto mówi:</label>
+        <select id="speakerRole"></select>
+        <button id="startBtn">Start nagrywania</button>
+        <button id="stopBtn" disabled>Stop i wyślij</button>
+      </div>
+      <p id="status">Gotowe do nagrywania.</p>
+    </div>
+
+    <div class="card">
+      <h2>Historia przygody</h2>
+      <div id="timeline"></div>
+    </div>
+  </div>
+
+  <script>
+    const players = [];
+    const speakerRole = document.getElementById('speakerRole');
+    const playersBox = document.getElementById('players');
+    const gmNameInput = document.getElementById('gmName');
+    const statusEl = document.getElementById('status');
+    const timeline = document.getElementById('timeline');
+
+    let mediaRecorder = null;
+    let chunks = [];
+
+    function renderRoles() {
+      const gmName = gmNameInput.value.trim() || 'Mistrz';
+      speakerRole.innerHTML = `<option value="GM">Mistrz Gry (${gmName})</option>`;
+      players.forEach((p, i) => {
+        const opt = document.createElement('option');
+        opt.value = `P${i}`;
+        opt.textContent = `Gracz: ${p}`;
+        speakerRole.appendChild(opt);
+      });
+      playersBox.textContent = players.length
+        ? `Gracze: ${players.join(', ')}`
+        : 'Brak graczy. Dodaj przynajmniej jednego.';
+    }
+
+    function addMessage(author, blobUrl) {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg';
+      const date = new Date().toLocaleString('pl-PL');
+      wrap.innerHTML = `<div class="meta">${author} • ${date}</div>`;
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.src = blobUrl;
+      wrap.appendChild(audio);
+      timeline.prepend(wrap);
+    }
+
+    document.getElementById('addPlayer').addEventListener('click', () => {
+      const input = document.getElementById('playerName');
+      const name = input.value.trim();
+      if (!name) return;
+      players.push(name);
+      input.value = '';
+      renderRoles();
+    });
+
+    gmNameInput.addEventListener('input', renderRoles);
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        chunks = [];
+
+        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          const url = URL.createObjectURL(blob);
+          const role = speakerRole.value;
+          const author = role === 'GM'
+            ? `Mistrz Gry (${gmNameInput.value.trim() || 'Mistrz'})`
+            : `Gracz (${players[Number(role.slice(1))]})`;
+          addMessage(author, url);
+          statusEl.textContent = 'Wiadomość dodana do historii.';
+          stream.getTracks().forEach(t => t.stop());
+        };
+
+        mediaRecorder.start();
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        statusEl.textContent = 'Nagrywanie...';
+      } catch (err) {
+        statusEl.textContent = `Błąd mikrofonu: ${err.message}`;
+      }
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', () => {
+      if (!mediaRecorder) return;
+      mediaRecorder.stop();
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+    });
+
+    renderRoles();
+  </script>
+</body>
+</html>
